@@ -1,0 +1,210 @@
+---
+title: "What MPG depends on?"
+author: "Bernardas Ciapas, bernardasc@hotmail.com"
+fontsize: 10pt
+geometry: margin=1cm
+output: pdf_document
+---
+
+**Brief**  
+Exploring relationship between a set of variables and miles per gallon (MPG) (outcome). They are particularly interested in the following two questions:
+
+´Is an automatic or manual transmission better for MPG¡
+"Quantify the MPG difference between automatic and manual transmissions"
+
+
+***Executive summary***  
+First attempt to quantify transmission type's (later: "am") influence on mpg ignores all other vars. I show that it's the most biased model.  
+The second attempt includes all the variables as regressors. Although little biased, it has high standard errors of the coefficients (thus, high p-values), so we cannot reject the null hypothesis (h0 being "transmission type has no influence").  
+Lastly, I add one additional regressor to the model. To show the benefit of adding an uncorrelated-to-am regressor, I train 2 models: one with most-correlated-to-am(rear axle ratio) and one with least-correlated-to-am regressor (vs). As expected, bias is reduced and high p-value preserved by adding an uncorrelated regressor.  
+The model of choice is the last model 4 with lowered bias and high confidence that automatic transmission has negative influence on mpg.
+
+
+```{r echo=FALSE}
+#load libraries and data set mtcars
+data(mtcars)
+library(ggplot2)
+
+#change actual factor regressors to factor type in mtcars data set
+mtcars$cyl <- factor(mtcars$cyl)
+mtcars$vs <- factor(mtcars$vs)
+mtcars$gear <- factor(mtcars$gear)
+mtcars$carb <- factor(mtcars$carb)
+mtcars$am <- factor(mtcars$am)
+```
+
+
+###Model 1: Transmission type as a single regressor (ignoring others): mpg ~ am
+```{r cache=FALSE, echo=FALSE}
+#first let us fit a model considering just transmission as a regressor, 
+#  ignoring influence of other variables
+fitAm <- lm(mpg ~ am, mtcars)
+#summary(fitAm)$coef
+```
+
+***Interpretation of coefficients***:  
+
+- Intercept - estimated mpg value for automatic, and itercept + am1 as estimated mpg for manual transmissions.  
+
+- "am1" - estimated change in mpg when switching from automatic to manual transmission.  
+
+- Estimated mpg for automatic transmission, ignoring influence of any other variables is summary(fitAm)$coef[1][1]: `r round(summary(fitAm)$coef[1][1],2)`  
+
+- Estimated mpg for manual transmission, ignoring influence of any other variables is summary(fitAm)$coef[1][1] + summary(fitAm)$coef[2][1]: `r round(summary(fitAm)$coef[1][1] + summary(fitAm)$coef[2][1],2)`  
+
+- Estimated change in mpg when switching from automatic to manual transmission when all other variables are ignored is summary(fitAm)$coef[2][1]: `r round(summary(fitAm)$coef[2][1],2)`
+
+- ***p-value of "slope" coefficient is `r as.character(round(summary(fitAm)$coef[2,4],6))`***, which is bellow 5%. Thus we accept significance of the coefficient, i.e. ***transmission type is a significant factor*** determining mpg in this model.
+
+
+Picture 1 in appendix displays actual and estimated values
+
+###Model 2: Transmission type as a regressor, keeping all other variables constant (mpg ~ .)
+```{r cache=FALSE, echo=FALSE}
+#second let us fit a model considering all variables (except mpg) a regressors
+fitAll <- lm(mpg ~ ., mtcars)
+#summary(fitAll)$coef
+```
+
+This time the estimated difference between automatic and manual transmission, keeping all other variables constant is summary(fitAll)$coef[rownames(summary(fitAll)$coef)=="am",1]: `r round(summary(fitAll)$coef[rownames(summary(fitAll)$coef)=="am1",1],2)`
+
+However, we must notice that this time the ***p-value is `r round(summary(fitAll)$coef[rownames(summary(fitAll)$coef)=="am1",4],2)`***, which is way above 5%. Thus we reject significance of transmission type as an factor for determining mpg in this model with all variables considered. This confirms the theory that adding more regressors to the model increases standard error of coefficients (which in turn leads to lesser significance of regressors)
+
+###Models 3 and 4: adding correlated and uncorrelated regressor (mpg ~ am + drat and mpg ~ am + vs)
+We observed 2 problems:  
+Model 1 had significant transmission type's coefficient, but we ignored other vars (thus, model may be biased).  
+Model 2 had less bias since all vars were considered, but high standard error (thus high p-value) of transmission type's coefficient disallows us to say that transmission type is a significant regressor.
+
+The goal is to reduce bias from model 1 by adding regressors in such a way that p-value of transmission remains low, i.e. transmission type's coef remains significant.  
+Theoretically adding only ***redundant*** (intuitively: correlated to am) variable increases standard error (and p-value); adding ***unredundant*** (intuitively: uncorrelated to am) should keep p-value of am low.
+We will create 2 models to show that:  
+
+* Model 3: mpg ~ am + correlated_var   #expect high p-values  
+
+* Model 4: mpg ~ am + uncorrelated_var #expect low p-values  
+
+First, let us look at correlation between vars (picure 2 in appendix). In particular, we are interested in a column "am". 
+Let us pick the ***highest-correlated-to-am variable drat (rear axle ratio)***. We can clearly see in cell [am, drat] of picture 2 that automatic transmission cars have lower drat than manual.
+Let us pick the ***lowest-correlated-to-am variable V/S (unfortunately, I can't figure it's meaning)***.
+
+```{r echo=FALSE}
+fitCor <- lm(mpg ~ am + drat, mtcars)
+#summary(fitCor)$coef
+
+fitUnCor <- lm(mpg ~ am + vs, mtcars)
+#summary(fitUnCor)$coef
+```
+
+Let us compare p-values in models 3 and 4:  
+  
+* p-value of transmission type in model 3 with a correlated variable ***drat*** added: `r as.character(round(summary(fitCor)$coef[rownames(summary(fitCor)$coef)=="am1",4],6))`  
+
+
+* p-value of transmission type in model 4 with an uncorrelated variable ***vs*** added: `r as.character(round(summary(fitUnCor)$coef[rownames(summary(fitUnCor)$coef)=="am1",4],6))`  
+
+p-value of transmission type still ***significant in model 4***, but ***insignificant in model 3***. 
+
+###Bias
+Sum of squared residuals measures bias. It should be highest for model 1 (most variables not considered) and lowest for model 2 (all variables considered). Models 3 and 4 should have bias in between. Let us verify:  
+
+Model 1: `r round(sum(resid(fitAm)^2),1)`  
+Model 2: `r round(sum(resid(fitAll)^2),1)`  
+Model 3: `r round(sum(resid(fitCor)^2),1)`  
+Model 4: `r round(sum(resid(fitUnCor)^2),1)`  
+
+
+###Diagnostics
+We will pick model 4 as the model of choice, because it "preserved" the low p-value of transmission coefficient (kept it significant) and also significantly reduced bias from model 1. For the model of choice let's do some diagnostics.
+
+In picure 3 of appendix there are 4 standard diagnostics plots:  
+
++ residuals vs. fitted values plots suggests there is a bit of heteroscedacity (higher dispersement towards higher predicted values), which suggests an important variable still missing in the model.  
++ standardized residuals vs. fitted reaffirms the above by showing higher deviation towards higher fitted values  
+
+Let us look at a few outliers:  
+
+* ***dffits*** - 5 highest differences in estimated mpg, if these values are ommitted from training the model (in absolute values):  
+```{r echo=FALSE}
+tmp<-head(sort(abs(dffits(fitUnCor)), decreasing=TRUE), n=5)
+paste(paste(names(tmp), ":", round(tmp,3),sep=""), sep=" ")
+```
+
+* ***dfbetas*** - 5 highest differences in estimated difference between (automatic and manual) in mpg, if these values are ommitted from training the model (in absolute values):  
+```{r echo=FALSE}
+dfb <- dfbetas(fitUnCor)
+dfbam1 <- dfb[,colnames(dfb)=="am1"]
+tmp<-head(sort(abs(dfbam1), decreasing=TRUE), n=5)
+paste(paste(names(tmp), ":", round(tmp,3),sep=""), sep=" ")
+```
+
+###Confidence and predition intervals
+Picture 4 in the appendix displays confidence and prediction intervals.
+Confidence interval shows where the estimated points would end up given the variablility of estimated betas.
+Prediction interval shows where actual points will end up with 95% probability.
+
+\newpage
+
+**Appendix**
+
+```{r echo=FALSE}
+plot(mpg ~ as.numeric(am), data=mtcars, type="n",
+    xaxt="n", #do not display x-axis values
+    main="mpg ~ am, ignoring others (red - predicted values)",
+    xlab="transmission type") 
+axis(side=1,at=c(1,2),labels=c("automatic","manual"))
+points(mtcars$am,mtcars$mpg)
+pred <- data.frame(am = as.factor(c(0,1)))
+pred$mpg <- predict (fitAm, newdata=pred)
+points(pred$am, pred$mpg, pch=19, col="red")
+```  
+
+Picture 1: transmission type as a single regressor, ignoring influence of all other variables  
+
+
+```{r echo=FALSE, cache=TRUE, message=FALSE, warning=FALSE}
+require(GGally)
+data(mtcars)
+ggpairs(mtcars, columns=which(colnames(mtcars)!="mpg"), 
+        upper=list(params=list(size=3)), 
+        lower=list(params=list(size=0.5)), 
+        diag=list(params=list(size=0.1)), 
+        axisLabels=list(params=list(size=8))) + 
+    theme_grey(base_size = 2)
+```  
+
+Picture 2: correlation between potential regressors  
+
+```{r echo=FALSE}
+par(mfrow=c(2,2))
+plot(fitUnCor)
+par(mfrow=c(1,1))
+```  
+
+Picture 3: diagnostic plots
+
+
+```{r echo=FALSE, fig.height=6, fig.width=10}
+#generate new data (all possible combinations of am[0..1] and vs[0..1])
+newdata <- data.frame(am=c(0,1,0,1), vs=c(0,0,1,1))
+newdata$am <- as.factor(newdata$am)
+newdata$vs <- as.factor(newdata$vs)
+pconf <- data.frame(predict(fitUnCor, newdata, interval=("confidence")), am=newdata$am, vs=newdata$vs)
+ppred <- data.frame(predict(fitUnCor, newdata, interval=("prediction")), am=newdata$am, vs=newdata$vs)
+pconf$interval = "confidence"
+ppred$interval = "prediction"
+dat <- rbind(pconf, ppred)
+colnames(dat)[1] <- "mpg"
+
+#combined surrogate x to display 2 factor vars on x scale = 2*am + vs
+dat$x <- 2 * as.numeric(as.character(dat$am)) + as.numeric(as.character(dat$vs))
+g = ggplot(dat, aes(x=x, y=mpg)) +
+    ggtitle("Confidence and prediction intervals")
+g = g + geom_ribbon(aes(ymin=lwr, ymax=upr, fill=interval), alpha=0.3)
+g = g + geom_line()
+mtcarsx <- 2 * as.numeric(as.character(mtcars$am)) + as.numeric(as.character(mtcars$vs))
+g = g + geom_point(data=mtcars, aes(x=mtcarsx, y=mpg), size=4)
+g = g + scale_x_continuous(limits=c(0,3), labels=c("am=0, v/s=0","am=0, v/s=1","am=1, v/s=0","am=1, v/s=1"))
+g
+```  
+
+Picture 4: Confidence and predition intervals
